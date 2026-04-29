@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Serverless Image Processing System
+  Mon Dien Toan Dam May - Su dung LocalStack
+
+# -------------------------------------------------------------------
+# Bien moi truong toan cuc
+# -------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        OUTPUT_BUCKET: !Ref OutputBucket
+        INPUT_BUCKET: !Ref InputBucket
+        LOCALSTACK_ENDPOINT: "http://localhost:4566"
+
+# -------------------------------------------------------------------
+# Cac tai nguyen he thong
+# -------------------------------------------------------------------
+Resources:
+
+  # --- Lambda Function chinh ---
+  ImageProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: image-processor
+      Handler: handler.lambda_handler
+      CodeUri: src/
+      Description: "Xu ly anh: resize, convert dinh dang"
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucket
+        - S3WritePolicy:
+            BucketName: !Ref OutputBucket
+      Events:
+        # Trigger 1: Upload qua HTTP (API Gateway)
+        UploadApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ImageApi
+            Path: /upload
+            Method: POST
+        # Trigger 2: Tu dong khi co file moi trong S3
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref InputBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".jpg"
+        S3TriggerPNG:
+          Type: S3
+          Properties:
+            Bucket: !Ref InputBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".png"
+        S3TriggerWEBP:
+          Type: S3
+          Properties:
+            Bucket: !Ref InputBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".webp"
+
+  # --- API Gateway ---
+  ImageApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: ImageProcessingAPI
+      StageName: local
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,x-filename'"
+        AllowOrigin: "'*'"
+
+  # --- S3 Bucket nhan anh goc ---
+  InputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: images-input
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOriginalAfter7Days
+            Status: Enabled
+            ExpirationInDays: 7  # Tu dong xoa anh goc sau 7 ngay
+
+  # --- S3 Bucket luu anh da xu ly ---
+  OutputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: images-output
+
+# -------------------------------------------------------------------
+# Output thong tin sau khi deploy
+# -------------------------------------------------------------------
+Outputs:
+  ApiEndpoint:
+    Description: "URL cua API Gateway"
+    Value: !Sub "https://${ImageApi}.execute-api.${AWS::Region}.amazonaws.com/local/upload"
+
+  InputBucketName:
+    Description: "Ten bucket nhan anh goc"
+    Value: !Ref InputBucket
+
+  OutputBucketName:
+    Description: "Ten bucket luu anh da xu ly"
+    Value: !Ref OutputBucket
+
+  LambdaFunctionArn:
+    Description: "ARN cua Lambda function"
+    Value: !GetAtt ImageProcessorFunction.Arn

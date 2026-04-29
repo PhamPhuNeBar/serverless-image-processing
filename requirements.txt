@@ -1,0 +1,5 @@
+Pillow>=10.0.0
+boto3>=1.26.0
+localstack>=3.0.0
+awscli-local>=0.21.0
+aws-sam-cli-local>=1.0.0

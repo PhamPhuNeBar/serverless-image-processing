@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serverless Image Processing · LocalStack Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0c10;
+  --surface: #111318;
+  --surface2: #1a1d24;
+  --border: #2a2d38;
+  --border2: #353846;
+  --accent: #4f9cf9;
+  --accent2: #7c3aed;
+  --green: #22c55e;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --text: #e8eaf0;
+  --muted: #6b7280;
+  --muted2: #9ca3af;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 40px 20px 80px;
+  background-image:
+    radial-gradient(ellipse 60% 40% at 20% 0%, rgba(79,156,249,.08) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 10%, rgba(124,58,237,.07) 0%, transparent 60%);
+}
+
+/* ── Header ── */
+header {
+  max-width: 900px;
+  margin: 0 auto 36px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.header-left h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #e8eaf0 30%, #4f9cf9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 6px;
+}
+
+.header-left p {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .04em;
+}
+
+.header-left p span { color: var(--accent); }
+
+/* Mode toggle */
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.mode-toggle .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse 2s infinite;
+}
+.mode-toggle .dot.offline { background: var(--muted); box-shadow: none; animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+.mode-toggle label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 36px; height: 20px;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0;
+  background: var(--border2);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: .2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  left: 3px; top: 3px;
+  background: var(--muted2);
+  border-radius: 50%;
+  transition: .2s;
+}
+.toggle-switch input:checked + .toggle-slider { background: rgba(79,156,249,.3); }
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+  background: var(--accent);
+}
+
+/* ── Main layout ── */
+.main { max-width: 900px; margin: 0 auto; }
+
+/* ── Drop card ── */
+.drop-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.drop-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 16px 16px 0 0;
+}
+
+.dropzone {
+  border: 1.5px dashed var(--border2);
+  border-radius: 12px;
+  padding: 44px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  margin-bottom: 22px;
+  position: relative;
+}
+
+.dropzone:hover, .dropzone.drag-over {
+  border-color: var(--accent);
+  background: rgba(79,156,249,.04);
+}
+
+.dropzone .dz-icon {
+  font-size: 40px;
+  margin-bottom: 14px;
+  display: block;
+}
+
+.dropzone .dz-main {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.dropzone .dz-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dropzone .dz-sub span { color: var(--accent); }
+
+input[type="file"] { display: none; }
+
+/* ── Info grid ── */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.info-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.info-card .lbl {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 8px;
+}
+
+.info-card .val {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ── Ops ── */
+.section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 12px;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.op-card {
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 12px;
+  cursor: pointer;
+  background: var(--surface2);
+  text-align: center;
+  transition: all .15s;
+  position: relative;
+}
+
+.op-card:hover { border-color: var(--accent); }
+
+.op-card.active {
+  border-color: var(--accent);
+  background: rgba(79,156,249,.08);
+  box-shadow: 0 0 0 1px rgba(79,156,249,.2), inset 0 1px 0 rgba(79,156,249,.1);
+}
+
+.op-card .op-icon { font-size: 24px; margin-bottom: 8px; }
+.op-card .op-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.op-card .op-desc { font-size: 10px; color: var(--muted); line-height: 1.5; font-family: var(--mono); }
+
+.check-badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border2);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+}
+.op-card.active .check-badge {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ── Sub opts ── */
+.sub-opts {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  display: none;
+}
+
+.sub-opts .sub-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.fmt-btns { display: flex; gap: 8px; }
+
+.fmt-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--mono);
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted2);
+  letter-spacing: .04em;
+  transition: all .15s;
+}
+
+.fmt-btn:hover { border-color: var(--accent); color: var(--accent); }
+.fmt-btn.sel { background: var(--accent); border-color: var(--accent); color: #000; }
+
+.range-row { display: flex; align-items: center; gap: 14px; }
+
+input[type=range] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(79,156,249,.5);
+}
+
+.range-val {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 52px;
+  text-align: right;
+}
+
+/* ── Process button ── */
+.process-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--accent), #2563eb);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: .01em;
+  position: relative;
+  overflow: hidden;
+}
+
+.process-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.15), transparent);
+  opacity: 0;
+  transition: .2s;
+}
+
+.process-btn:hover:not(:disabled)::before { opacity: 1; }
+.process-btn:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+/* ── Progress ── */
+.progress-wrap {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 12px;
+  display: none;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 2px;
+  width: 0%;
+  transition: width .4s;
+}
+
+/* ── Status ── */
+.status-bar {
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  display: none;
+}
+
+.status-bar.loading { background: rgba(234,179,8,.08); color: var(--yellow); border: 1px solid rgba(234,179,8,.2); }
+.status-bar.success { background: rgba(34,197,94,.08); color: var(--green); border: 1px solid rgba(34,197,94,.2); }
+.status-bar.error   { background: rgba(239,68,68,.08);  color: var(--red);   border: 1px solid rgba(239,68,68,.2); }
+
+/* ── Results ── */
+.results {
+  display: none;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  border-bottom: 1px solid var(--border);
+}
+
+.result-card.before .card-header { color: var(--muted2); }
+.result-card.after  .card-header { color: var(--accent); }
+
+.result-card .card-header .dot2 {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+.before .dot2 { background: var(--muted); }
+.after .dot2  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+.result-card img {
+  width: 100%;
+  height: 220px;
+  object-fit: contain;
+  background: var(--surface2);
+  display: block;
+}
+
+.result-meta {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.result-meta .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.result-meta .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.result-meta .v {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.badge-saving {
+  display: inline-block;
+  background: rgba(34,197,94,.15);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  border: 1px solid rgba(34,197,94,.3);
+}
+
+.download-btn {
+  display: block;
+  margin: 12px 16px;
+  padding: 9px;
+  background: rgba(79,156,249,.1);
+  color: var(--accent);
+  border: 1px solid rgba(79,156,249,.3);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: all .15s;
+  letter-spacing: .04em;
+}
+
+.download-btn:hover { background: rgba(79,156,249,.2); border-color: var(--accent); }
+
+/* ── Log panel ── */
+.log-panel {
+  background: #0d0f14;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  display: none;
+}
+
+.log-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-header .traffic {
+  display: flex;
+  gap: 6px;
+}
+
+.log-header .traffic span {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+
+.log-header .traffic span:nth-child(1) { background: #ef4444; }
+.log-header .traffic span:nth-child(2) { background: #eab308; }
+.log-header .traffic span:nth-child(3) { background: #22c55e; }
+
+.log-body { padding: 16px 20px; max-height: 220px; overflow-y: auto; }
+
+.log-line {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.log-line.info    { color: #4EC9B0; }
+.log-line.success { color: #22c55e; }
+.log-line.error   { color: #ef4444; }
+.log-line.warn    { color: #eab308; }
+.log-line.dim     { color: var(--muted); }
+
+/* ── API url display ── */
+.api-info {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-info .badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.api-info .badge.demo   { background: rgba(124,58,237,.2); color: #a78bfa; border: 1px solid rgba(124,58,237,.3); }
+.api-info .badge.live   { background: rgba(34,197,94,.15); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+
+.api-info .url { color: var(--muted2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Responsive ── */
+@media (max-width: 680px) {
+  .results, .ops-grid, .info-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 420px) {
+  .results, .ops-grid, .info-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="main">
+
+  <!-- Header -->
+  <header>
+    <div class="header-left">
+      <h1>🖼 Serverless Image Processing</h1>
+      <p>AWS Lambda + S3 · <span>LocalStack</span> · Môn Điện Toán Đám Mây</p>
+    </div>
+
+    <div class="mode-toggle">
+      <div class="dot" id="statusDot"></div>
+      <label>
+        <span id="modeLabel" style="color:var(--green)">LOCALSTACK</span>
+        <div class="toggle-switch">
+          <input type="checkbox" id="demoToggle" onchange="toggleMode()">
+          <div class="toggle-slider"></div>
+        </div>
+        <span>DEMO</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- Drop card -->
+  <div class="drop-card">
+
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <span class="dz-icon">📂</span>
+      <div class="dz-main" id="dzMain">Kéo thả ảnh vào đây hoặc <span style="color:var(--accent)">chọn file</span></div>
+      <div class="dz-sub">Hỗ trợ: JPEG · PNG · WEBP · GIF &nbsp;|&nbsp; Tối đa <span>10MB</span></div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <!-- Info grid -->
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="lbl">File size</div>
+        <div class="val" id="infoSize">—</div>
+      </div>
+      <div class="info-card">
+        <div class="lbl">Dimensions</div>
+        <div class="val" id="infoDim">—</div>
+      </div>
+      <div class="info-card">
+        <div class="lbl">Format</div>
+        <div class="val" id="infoFmt">—</div>
+      </div>
+      <div class="info-card">
+        <div class="lbl">Process time</div>
+        <div class="val" id="infoTime">—</div>
+      </div>
+    </div>
+
+    <!-- Options panel -->
+    <div id="optPanel" style="display:none">
+      <div class="section-label">// Chọn thao tác xử lý</div>
+
+      <div class="ops-grid">
+        <div class="op-card" id="op-compress" onclick="selectOp('compress')">
+          <div class="check-badge" id="chk-compress">✓</div>
+          <div class="op-icon">🗜️</div>
+          <div class="op-title">Nén file</div>
+          <div class="op-desc">Giảm size, giữ định dạng gốc</div>
+        </div>
+        <div class="op-card" id="op-convert" onclick="selectOp('convert')">
+          <div class="check-badge" id="chk-convert">✓</div>
+          <div class="op-icon">🔄</div>
+          <div class="op-title">Đổi định dạng</div>
+          <div class="op-desc">Chuyển sang JPEG / PNG / WEBP</div>
+        </div>
+        <div class="op-card" id="op-resize" onclick="selectOp('resize')">
+          <div class="check-badge" id="chk-resize">✓</div>
+          <div class="op-icon">📐</div>
+          <div class="op-title">Resize</div>
+          <div class="op-desc">Giảm kích thước, giữ tỉ lệ</div>
+        </div>
+        <div class="op-card" id="op-all" onclick="selectOp('all')">
+          <div class="check-badge" id="chk-all">✓</div>
+          <div class="op-icon">✨</div>
+          <div class="op-title">Tối ưu tất cả</div>
+          <div class="op-desc">Nén + resize + WEBP</div>
+        </div>
+      </div>
+
+      <!-- Sub: Compress -->
+      <div class="sub-opts" id="subCompress">
+        <div class="sub-label">Chất lượng nén</div>
+        <div class="range-row">
+          <input type="range" min="10" max="100" value="80" id="quality"
+                 oninput="document.getElementById('qualVal').textContent = this.value + '%'">
+          <span class="range-val" id="qualVal">80%</span>
+        </div>
+      </div>
+
+      <!-- Sub: Convert -->
+      <div class="sub-opts" id="subConvert">
+        <div class="sub-label">Định dạng đầu ra</div>
+        <div class="fmt-btns">
+          <button class="fmt-btn sel" onclick="selFmt(this,'image/jpeg')">JPEG</button>
+          <button class="fmt-btn" onclick="selFmt(this,'image/png')">PNG</button>
+          <button class="fmt-btn" onclick="selFmt(this,'image/webp')">WEBP</button>
+        </div>
+      </div>
+
+      <!-- Sub: Resize -->
+      <div class="sub-opts" id="subResize">
+        <div class="sub-label">Kích thước tối đa (px)</div>
+        <div class="range-row">
+          <input type="range" min="100" max="2000" step="50" value="800" id="maxDim"
+                 oninput="document.getElementById('dimVal').textContent = this.value + 'px'">
+          <span class="range-val" id="dimVal">800px</span>
+        </div>
+      </div>
+
+      <!-- API info bar -->
+      <div class="api-info" id="apiInfoBar">
+        <span class="badge demo" id="apiBadge">DEMO</span>
+        <span class="url" id="apiUrl">Canvas-only · Không cần LocalStack</span>
+      </div>
+
+      <button class="process-btn" id="processBtn" onclick="processImage()" disabled>
+        ⚙️ Xử lý ảnh
+      </button>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+
+      <div class="status-bar" id="statusBar"></div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div class="result-card before">
+      <div class="card-header">
+        <span class="dot2"></span> Ảnh gốc
+      </div>
+      <img id="imgBefore" src="" alt="Ảnh gốc">
+      <div class="result-meta">
+        <div class="row"><span class="k">File size</span><strong class="v" id="metaOrigSize">—</strong></div>
+        <div class="row"><span class="k">Dimensions</span><strong class="v" id="metaOrigDim">—</strong></div>
+        <div class="row"><span class="k">Format</span><strong class="v" id="metaOrigFmt">—</strong></div>
+      </div>
+    </div>
+    <div class="result-card after">
+      <div class="card-header">
+        <span class="dot2"></span> Sau xử lý
+      </div>
+      <img id="imgAfter" src="" alt="Ảnh đã xử lý">
+      <div class="result-meta">
+        <div class="row"><span class="k">File size</span><strong class="v" id="metaNewSize">—</strong></div>
+        <div class="row"><span class="k">Dimensions</span><strong class="v" id="metaNewDim">—</strong></div>
+        <div class="row"><span class="k">Process time</span><strong class="v" id="metaDuration">—</strong></div>
+      </div>
+      <a class="download-btn" id="downloadBtn" href="#" download>⬇ Tải ảnh đã xử lý</a>
+    </div>
+  </div>
+
+  <!-- Log panel -->
+  <div class="log-panel" id="logPanel">
+    <div class="log-header">
+      <div class="traffic">
+        <span></span><span></span><span></span>
+      </div>
+      <span>// LocalStack Lambda Logs</span>
+    </div>
+    <div class="log-body" id="logContent"></div>
+  </div>
+
+</div>
+
+<script>
+// ──────────────────────────────────────────────
+// Config
+// ──────────────────────────────────────────────
+// ⚠️  Đây là API ID đúng từ LocalStack của bạn
+const LOCALSTACK_URL = "http://localhost:4566/restapis/1cgmw8ekid/local/_user_request_/upload";
+const MAX_FILE_SIZE  = 10 * 1024 * 1024;
+
+let isDemoMode = true;   // Mặc định DEMO (không cần LocalStack)
+let currentFile = null;
+let currentOp   = null;
+let targetFmt   = "image/jpeg";
+
+// ──────────────────────────────────────────────
+// Mode toggle
+// ──────────────────────────────────────────────
+function toggleMode() {
+  isDemoMode = document.getElementById("demoToggle").checked;
+  const dot   = document.getElementById("statusDot");
+  const label = document.getElementById("modeLabel");
+  const badge = document.getElementById("apiBadge");
+  const url   = document.getElementById("apiUrl");
+
+  if (isDemoMode) {
+    dot.className   = "dot offline";
+    label.style.color = "var(--muted2)";
+    label.textContent = "LOCALSTACK";
+    badge.className = "badge demo";
+    badge.textContent = "DEMO";
+    url.textContent = "Canvas-only · Không cần LocalStack";
+  } else {
+    dot.className   = "dot";
+    label.style.color = "var(--green)";
+    label.textContent = "LOCALSTACK";
+    badge.className = "badge live";
+    badge.textContent = "LIVE";
+    url.textContent = LOCALSTACK_URL;
+  }
+}
+
+// Init UI
+toggleMode();
+
+// ──────────────────────────────────────────────
+// File handling
+// ──────────────────────────────────────────────
+const fileInput  = document.getElementById("fileInput");
+const dropzone   = document.getElementById("dropzone");
+const processBtn = document.getElementById("processBtn");
+
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag-over"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag-over"));
+dropzone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropzone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) { fileInput.files = e.dataTransfer.files; loadFile(file); }
+});
+
+async function loadFile(file) {
+  if (file.size > MAX_FILE_SIZE) {
+    showStatus("error", "File quá lớn! Tối đa 10MB."); return;
+  }
+  currentFile = file;
+  currentOp   = null;
+
+  document.getElementById("dzMain").innerHTML =
+    `<span style="color:var(--accent)">${file.name}</span> &nbsp;·&nbsp; ${formatBytes(file.size)}`;
+
+  document.getElementById("infoSize").textContent = formatBytes(file.size);
+  document.getElementById("infoFmt").textContent  = (file.type.split("/")[1] || "?").toUpperCase();
+  document.getElementById("infoTime").textContent = "—";
+
+  const dim = await getImageDimensions(file);
+  document.getElementById("infoDim").textContent = dim;
+
+  document.getElementById("optPanel").style.display = "block";
+  document.getElementById("results").style.display  = "none";
+  document.getElementById("logPanel").style.display = "none";
+  document.getElementById("statusBar").style.display = "none";
+  processBtn.disabled = true;
+
+  ["compress","convert","resize","all"].forEach(o =>
+    document.getElementById("op-" + o).classList.remove("active"));
+  ["subCompress","subConvert","subResize"].forEach(id =>
+    document.getElementById(id).style.display = "none");
+}
+
+// ──────────────────────────────────────────────
+// Op selection
+// ──────────────────────────────────────────────
+function selectOp(op) {
+  currentOp = op;
+  ["compress","convert","resize","all"].forEach(o =>
+    document.getElementById("op-" + o).classList.remove("active"));
+  document.getElementById("op-" + op).classList.add("active");
+  document.getElementById("subCompress").style.display = op === "compress" ? "block" : "none";
+  document.getElementById("subConvert").style.display  = op === "convert"  ? "block" : "none";
+  document.getElementById("subResize").style.display   = op === "resize"   ? "block" : "none";
+  processBtn.disabled = false;
+}
+
+function selFmt(btn, fmt) {
+  targetFmt = fmt;
+  document.querySelectorAll(".fmt-btn").forEach(b => b.classList.remove("sel"));
+  btn.classList.add("sel");
+}
+
+// ──────────────────────────────────────────────
+// Main processing
+// ──────────────────────────────────────────────
+async function processImage() {
+  if (!currentFile || !currentOp) return;
+
+  processBtn.disabled = true;
+  showProgress(0);
+  showStatus("loading", "Đang xử lý ảnh...");
+  clearLog();
+
+  const startTime = Date.now();
+  addLog("info", `[${ts()}] Bắt đầu xử lý: ${currentFile.name}`);
+  addLog("info", `[${ts()}] Kích thước gốc: ${formatBytes(currentFile.size)}`);
+  addLog("info", `[${ts()}] Thao tác: ${currentOp}`);
+  addLog("dim",  `[${ts()}] Mode: ${isDemoMode ? "DEMO (Canvas)" : "LIVE (LocalStack)"}`);
+
+  // Show before image
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById("imgBefore").src = e.target.result;
+    document.getElementById("metaOrigSize").textContent = formatBytes(currentFile.size);
+    document.getElementById("metaOrigFmt").textContent  = (currentFile.type.split("/")[1] || "?").toUpperCase();
+  };
+  reader.readAsDataURL(currentFile);
+
+  const origDim = await getImageDimensions(currentFile);
+  document.getElementById("metaOrigDim").textContent = origDim;
+
+  showProgress(25);
+
+  try {
+    // ── Canvas processing ──
+    const img = new Image();
+    img.src = URL.createObjectURL(currentFile);
+    await new Promise(r => { img.onload = r; });
+
+    let w = img.width, h = img.height;
+
+    if (currentOp === "resize" || currentOp === "all") {
+      const max = parseInt(document.getElementById("maxDim").value);
+      if (w > max || h > max) {
+        if (w >= h) { h = Math.round(h * max / w); w = max; }
+        else        { w = Math.round(w * max / h); h = max; }
+      }
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width  = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+
+    let outFmt, quality;
+    if (currentOp === "compress") {
+      const srcFmt = currentFile.type || "image/jpeg";
+      // PNG không hỗ trợ lossy compression → tự động dùng WEBP
+      outFmt  = srcFmt === "image/png" ? "image/webp" : srcFmt;
+      quality = parseInt(document.getElementById("quality").value) / 100;
+    } else if (currentOp === "convert") {
+      outFmt  = targetFmt;
+      quality = 0.88;
+    } else if (currentOp === "resize") {
+      const srcFmtR = currentFile.type || "image/jpeg";
+      // PNG lossless → dùng WEBP để tránh tăng dung lượng
+      outFmt  = srcFmtR === "image/png" ? "image/webp" : srcFmtR;
+      quality = 0.92;
+    } else {
+      outFmt  = "image/webp";
+      quality = 0.75;
+    }
+
+    const dataUrl = canvas.toDataURL(outFmt, outFmt === "image/png" ? undefined : quality);
+    const blob    = await (await fetch(dataUrl)).blob();
+
+    showProgress(60);
+
+    if (isDemoMode) {
+      // ── DEMO MODE: chỉ dùng canvas, không gọi API ──
+      addLog("warn",    `[${ts()}] [DEMO] Bỏ qua API Gateway, dùng kết quả Canvas.`);
+      await fakeDelay(300);
+      showProgress(90);
+      addLog("success", `[${ts()}] [DEMO] Xử lý canvas hoàn thành: ${w}×${h}px`);
+      addLog("success", `[${ts()}] [DEMO] Output size: ${formatBytes(blob.size)}`);
+      showResultLocal(dataUrl, blob, w, h, outFmt, Date.now() - startTime);
+
+    } else {
+      // ── LIVE MODE: gọi Lambda qua API Gateway ──
+      addLog("info", `[${ts()}] Đang gửi request đến Lambda qua API Gateway...`);
+      addLog("dim",  `[${ts()}] POST ${LOCALSTACK_URL}`);
+
+      try {
+        const arrayBuffer = await currentFile.arrayBuffer();
+        const response = await fetch(LOCALSTACK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "x-filename":   encodeURIComponent(currentFile.name),
+            "x-operation":  currentOp,
+            "x-quality":    currentOp === "compress" ? document.getElementById("quality").value : "80",
+            "x-format":     outFmt,
+            "x-maxdim":     (currentOp === "resize" || currentOp === "all")
+                            ? document.getElementById("maxDim").value : "800",
+          },
+          body: arrayBuffer,
+        });
+
+        showProgress(90);
+        const totalMs = Date.now() - startTime;
+
+        if (!response.ok) {
+          addLog("warn", `[${ts()}] Lambda HTTP ${response.status} — fallback sang Canvas`);
+          showResultLocal(dataUrl, blob, w, h, outFmt, totalMs);
+        } else {
+          const data = await response.json();
+          addLog("success", `[${ts()}] Lambda OK! (${data.duration_ms || "?"}ms)`);
+          addLog("success", `[${ts()}] Output key: ${data.outputKey || "—"}`);
+          showResultFromApi(data, dataUrl, blob, w, h, outFmt, totalMs);
+        }
+
+      } catch (fetchErr) {
+        const totalMs = Date.now() - startTime;
+        addLog("error", `[${ts()}] Fetch lỗi: ${fetchErr.message}`);
+        addLog("warn",  `[${ts()}] Fallback sang kết quả Canvas local`);
+        showResultLocal(dataUrl, blob, w, h, outFmt, totalMs);
+        showStatus("success", `Xong! (LocalStack không kết nối được — hiển thị kết quả Canvas)`);
+        showProgress(100);
+        document.getElementById("infoTime").textContent = totalMs + " ms";
+        processBtn.disabled = false;
+        return;
+      }
+    }
+
+    const totalMs = Date.now() - startTime;
+    showProgress(100);
+    document.getElementById("infoTime").textContent = totalMs + " ms";
+    showStatus("success", `Hoàn tất! Xử lý trong ${totalMs}ms`);
+
+  } catch (err) {
+    showProgress(0);
+    addLog("error", `[${ts()}] LỖI: ${err.message}`);
+    showStatus("error", "Lỗi: " + err.message);
+  }
+
+  processBtn.disabled = false;
+}
+
+// ──────────────────────────────────────────────
+// Result display
+// ──────────────────────────────────────────────
+function showResultLocal(dataUrl, blob, w, h, outFmt, durationMs) {
+  const ext = outFmt.split("/")[1] || "jpg";
+  document.getElementById("imgAfter").src = dataUrl;
+  document.getElementById("downloadBtn").href = dataUrl;
+  document.getElementById("downloadBtn").download = `processed.${ext}`;
+  setNewMeta(blob.size, w, h, durationMs);
+  document.getElementById("results").style.display = "grid";
+}
+
+function showResultFromApi(data, fallbackDataUrl, blob, w, h, outFmt, durationMs) {
+  const ext = outFmt.split("/")[1] || "jpg";
+  // Luôn dùng canvas dataUrl để hiển thị (presigned S3 URL không load được từ browser)
+  document.getElementById("imgAfter").src = fallbackDataUrl;
+  document.getElementById("downloadBtn").href = fallbackDataUrl;
+  document.getElementById("downloadBtn").download = `processed.${ext}`;
+  if (data.newDimensions) {
+    const parts = data.newDimensions.split("x").map(s => parseInt(s.trim()));
+    setNewMeta(blob.size, parts[0] || w, parts[1] || h, durationMs);
+  } else {
+    setNewMeta(blob.size, w, h, durationMs);
+  }
+  document.getElementById("results").style.display = "grid";
+}
+
+function setNewMeta(newBytes, w, h, durationMs) {
+  const pct = Math.round((1 - newBytes / currentFile.size) * 100);
+  const badge = pct > 0 ? `<span class="badge-saving">-${pct}%</span>` : "";
+  document.getElementById("metaNewSize").innerHTML = formatBytes(newBytes) + badge;
+  document.getElementById("metaNewDim").textContent = `${w} × ${h} px`;
+  document.getElementById("metaDuration").textContent = durationMs + " ms";
+}
+
+// ──────────────────────────────────────────────
+// Utilities
+// ──────────────────────────────────────────────
+function showStatus(type, msg) {
+  const el = document.getElementById("statusBar");
+  el.className = "status-bar " + type;
+  el.style.display = "block";
+  el.textContent = { loading: "⏳ ", success: "✅ ", error: "❌ " }[type] + msg;
+}
+
+function showProgress(pct) {
+  const wrap = document.getElementById("progressWrap");
+  wrap.style.display = "block";
+  document.getElementById("progressFill").style.width = pct + "%";
+  if (pct >= 100) setTimeout(() => { wrap.style.display = "none"; }, 900);
+}
+
+function addLog(type, text) {
+  document.getElementById("logPanel").style.display = "block";
+  const line = document.createElement("div");
+  line.className = "log-line " + type;
+  line.textContent = text;
+  document.getElementById("logContent").appendChild(line);
+  document.getElementById("logContent").scrollTop = 9999;
+}
+
+function clearLog() { document.getElementById("logContent").innerHTML = ""; }
+
+function formatBytes(bytes) {
+  if (bytes < 1024)            return bytes + " B";
+  if (bytes < 1024 * 1024)    return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024*1024)).toFixed(2) + " MB";
+}
+
+function ts() { return new Date().toLocaleTimeString("vi-VN"); }
+
+async function getImageDimensions(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => resolve(`${img.width} × ${img.height}`);
+    img.onerror = () => resolve("?");
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function fakeDelay(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+
+</body>
+</html>
