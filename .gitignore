@@ -1,15 +1,8 @@
-# File zip Lambda (8MB, không cần push)
 function.zip
-
-# Output files
 output.jpg
 output.json
 response.json
-
-# Python cache
 __pycache__/
 *.pyc
 .pytest_cache/
-
-# LocalStack data
 .localstack/
